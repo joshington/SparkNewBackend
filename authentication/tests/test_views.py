@@ -11,3 +11,6 @@ class TestViews(TestSetUp):
         self.assertEqual(res.data['email'],self.user_data['email'])
         self.assertEqual(res.data['phone'], self.user_data['phone'])
         self.assertEqual(res.status_code, 201)
+
+
+
