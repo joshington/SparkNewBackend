@@ -31,6 +31,10 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
+    #fetch all users using 
+
+
+months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
 #====since we are making a custom django model
 class User(AbstractBaseUser,PermissionsMixin):
@@ -41,17 +45,29 @@ class User(AbstractBaseUser,PermissionsMixin):
     is_verified = models.BooleanField(default=False)
     is_staff=models.BooleanField(default=False)
     is_superuser=models.BooleanField(default=False)
-    created_at = models.DateTimeField(default=timezone.now())
-    updated_at = models.DateTimeField(default=timezone.now())
+    created_at = models.DateTimeField(default=datetime.datetime.now())
+    updated_at = models.DateTimeField(default=datetime.datetime.now())
     pin_created = models.BooleanField(default=False)
+    country = models.CharField(max_length=17,default='Uganda')
+    now_admin = models.BooleanField(default=False)
     #this is to help me handle regenerating the pin, create new pin
 
+
+    @property
+    def get_month(self):
+        return months[self.created_at.date().month - 1]
 
 
     objects=UserManager()
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['phone']
+
+
+   
+    #===so if i do user.get_month == gets me the month the user was registered in
+
+
 
     def __str__(self):
         return self.email 
@@ -84,6 +100,18 @@ class EmailOTP(models.Model):
 
     def __str__(self) -> str:
         return self.otp 
+
+
+#====working on the admin
+class UserAdmin(models.Model):
+    email = models.EmailField(unique=True,db_index=True)
+    username = models.CharField(max_length=12,default='@admin')
+    password = models.CharField(max_length=20)
+
+    def __str_(self):
+        return self.username
+
+
 
 
 #=====now here comes the magic of signals

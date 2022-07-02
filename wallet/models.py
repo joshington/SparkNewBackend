@@ -67,12 +67,24 @@ class Wallet(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,db_constraint=False,related_name='user')
     latest_transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE,\
         db_constraint=False,related_name='wallet_transaction')
-    created_at = models.DateTimeField(default=timezone.now,editable=False)
+    created_at = models.DateTimeField(default=datetime.datetime.now(),editable=False)
 
     class Meta:
         ordering = ['created_at']
 
     def __str__(self) -> str:
         return str(self.owner)
+
+#====>model for generating profits=====
+class Profits(models.Model):
+    profit_amount=models.IntegerField()
+    payment_ref = models.ForeignKey(Payment,blank=True, on_delete=models.CASCADE, null=True,db_constraint=False)
+    created = models.DateTimeField(default=datetime.datetime.now())
+
+    class Meta:
+        ordering = ['created']
+
+    def __str__(self) -> str:
+        return self.profit_amount
 
 

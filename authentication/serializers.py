@@ -1,6 +1,6 @@
 #from dataclasses import fields
 from rest_framework import serializers
-from .models import EmailOTP, User
+from .models import EmailOTP, User,UserAdmin
 
 from django.contrib.auth import authenticate
 
@@ -26,6 +26,24 @@ class RegisterSerializer(serializers.ModelSerializer):
         #     instance.set_password(password)
         # instance.save()
         # return instance
+    
+class AdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserAdmin
+        fields = ['email','username','password']
+        extra_kwargs = {'password':{'write_only':True}}
+
+        def create(self, validated_data):
+            user = UserAdmin.objects.create(**validated_data)
+            return user
+
+
+
+
+class AdminLoginSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserAdmin
+        fields = ['username','password']
 
 
 class VerifyUserSerializer(serializers.ModelSerializer):

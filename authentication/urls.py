@@ -12,4 +12,7 @@ urlpatterns = [
     path('create-new-pin/',CreatePinView.as_view()),
     path('login-user/',LoginView.as_view()),
     path('create-username/',AddUsernameView.as_view()),
+    path('register-admin/',RegisterAdmin.as_view()),
+    path('login-admin/',AdminLoginView.as_view()),
+    path('user-analytics/',UserAnalyticsView.as_view()),
 ]

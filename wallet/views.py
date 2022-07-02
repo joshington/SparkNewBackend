@@ -1,3 +1,4 @@
+from operator import add
 from django.shortcuts import render
 import django_filters.rest_framework
 from rest_framework import generics, status,views
@@ -15,10 +16,10 @@ import json,base64 #we want to decode the token
 import json ,re
 from uuid import UUID
 from django.db import transaction
-
+from authentication.models import*
 
 from .serializers import*
-from .models import Payment, Transaction,Wallet
+from .models import Payment, Transaction,Wallet,Profits
 from .utils.balance import balance as get_balance
 from .utils.rave import make_momo_payment
 from .utils.top_up import top_up
@@ -26,7 +27,7 @@ from .utils.withdraw import withdraw
 
 from authentication.models import User
 
-from rave_python import Rave
+from rave_python import Rave,  Misc, RaveExceptions
 
 
 #importing ent variables
@@ -248,6 +249,7 @@ class SendToAccountView(APIView):
                 if sender_balance*0.5 > minimum_balance and sender_balance - int(amount) > minimum_balance:
                     #==first reduce the sender's balance
                     sender_balance  -=  int(amount)
+                    wallet_user.save()
                     sender.save()#===chop the senders's balance straight away
                     #create a Transaction
                     new_payment=Payment(status='PENDING',amount=int(amount),user=sender,
@@ -330,62 +332,310 @@ def transfer_money_to_phone(phone, amount,username="Unknown User"):
 #===i want to test this transfer cz man its not working properly=======
 #==but actually ask them to first confirm the phone number
 #so ask for it
-class WalletMobileTransfer(APIView):
+
+
+#=====format the phone number basing on the coutry ===so actually 
+def format_phone_number(phone_number):
+    if re.search(r"\A\+2567\d{8}\Z",phone_number):
+        return phone_number[1:]
+    elif re.search(r"\A07\d{8}\Z",phone_number):
+        return "256" + phone_number[1:]
+#=====actually 
+
+#===just  use a function to automate adding country code to the phone=====
+def add_code_phone(country,phone):
+    return {
+        'Uganda':'256'+phone[1:],
+        'Kenya':'254'+phone[1:],
+        'Tanzania':'255'+phone[1:],
+        'Rwanda':'250'+phone[1:],
+        'Zambia':'260'+phone[1:],
+        'Ghana':'233'+phone[1:],
+        'Cameroon':'237'+phone[1:],
+        "Cote d'Ivoire":'225'+phone[1:],
+
+    }[country]
+#task is at hand is t
+
+
+mm_countries = ["Rwanda","Tanzania","Uganda","Zambia","Kenya","Ghana","Cameroon","Cote d'Ivoire"]
+
+#====take in phone number and country
+def format_phone_number(phone_number,country):
+    if phone_number and country:
+        if country in mm_countries:
+            if country == 'Uganda':
+                if re.search(r"\A\+2567\d{8}\Z",phone_number):
+                    return phone_number[1:]
+                elif re.search(r"\A07\d{8}\Z",phone_number):
+                    return add_code_phone(country,phone_number)
+            elif country == 'Kenya':
+                if re.search(r"\A\+2547\d{8}\Z",phone_number):
+                    return phone_number[1:]
+                elif re.search(r"\A07\d{8}\Z",phone_number):
+                    return add_code_phone(country,phone_number)
+            elif country == 'Tanzania':
+                if re.search(r"\A\+2557\d{8}\Z",phone_number):
+                    return phone_number[1:]
+                elif re.search(r"\A07\d{8}\Z",phone_number):
+                    return add_code_phone(country,phone_number)
+        
+       
+
+
+#transfer to user
+
+
+#=====function to help format the account bank
+def get_account_bank(country):
+    home_countries = ["Rwanda","Tanzania","Uganda","Zambia"]
+    account_bank = "MPS"
+    if country in home_countries:
+        account_bank = "MPS"
+    elif country == "Kenya":
+        account_bank = "MPX"
+    elif country == "Ghana":
+        account_bank = "MTN"
+    elif country == "Cameroon" or country == "Cote d'Ivoire":
+        account_bank = "FMM"
+    
+    return account_bank
+
+
+
+def get_currency(country):
+    if country == "Rwanda":
+        currency = "RWF"
+    elif country == "Tanzania":
+        currency = "TZS"
+    elif country == "Uganda":
+        currency = "UGX"
+    elif country == "Zambia":
+        currency = "ZMW"
+    elif country == "Kenya":
+        currency = "KES" 
+    elif country == "Ghana":
+        currency = "GHS"
+    elif country == "Cameroon":
+        currency = "XAF"
+    elif country =="Cote d'Ivoire":currency = "XOF"
+
+
+#===get all rates===
+class GetRates(APIView):
+    def get(self, request, *args, **kwargs):
+        """returns all supported currencies"""
+        res2= rave.Transfer.getFee()
+        return Response({
+            "status":True,
+            "message":"All rates",
+            "rates":res2
+        })
+       
+
+
+#=====process balance is the basis for all cashouts====
+#===get the top balance
+class GetBalance(APIView):
+    def get(self, request, *args, **kwargs):
+        res2= rave.Transfer.getFee()
+        return Response({
+            'status':True,
+            'bal_data':res2
+        })
+
+
+class WithdrawView(APIView):
     def post(self, request, *args, **kwargs):
         """
             task is to test the transfer endpoint on flutterwave
             256704372213
         """
-        details = {
-            "account_bank": "MPS",
-            "account_number": "256706626855",
-            "amount": 1200,
-            "currency": "KES",
-            "beneficiary_name": "Akinyi Kimwei",
-            "meta": {
-                "sender": "Flutterwave Developers",
-                "sender_country": "ZA",
-                "mobile_number": "256760810134"
-            }
-        }
-        res=rave.Transfer.initiate(details)
-        return Response(res, status=status.HTTP_200_OK)
+        #===first get the balance of the top user to proceed====
+
+        user_email = request.query_params['email']
+        amount = request.query_params['amount']
+
+        charge = 500; minimum_balance = 2000 
+
+        #==basis 
+        try:
+            user_targ = User.objects.get(email=user_email)
+            wallet_user = Wallet.objects.get(owner=user_targ)
+            #get sender balance
+            sender_balance = wallet_user.balance 
+            if user_targ.is_verified:
+                if user_targ.country in mm_countries:
+                    if sender_balance*0.5 > minimum_balance and sender_balance - (int(amount) + charge) > minimum_balance:
+                        #====first deduct then send ===, i think thats how the logic works
+                        #===first deduct the dimes then complete
+                        
+                        #instantiating payment but still pending
+                        try:
+                            sender_balance -=  int(amount)
+                            wallet_user.save()
+                            #save the wallet
+                            
+                            new_payment=Payment(status='PENDING',amount=int(amount),user=user_targ,
+                                category='WITHDRAW'
+                            )
+                            new_payment.save()
+                            details = {
+                                "account_bank": get_account_bank(user_targ.country),
+                                "account_number": format_phone_number(user_targ.phone,user_targ.country),
+                                "amount": int(amount),
+                                "currency": get_currency(user_targ.country),
+                                "beneficiary_name": user_targ.uname,
+                                "meta": [
+                                    {
+                                        "sender": "Flutterwave Developers",
+                                        "sender_country": "UG",
+                                        "mobile_number": "256704372213"
+                                    }
+                                ],
+                            }
+                            res=rave.Transfer.initiate(details)
+                            new_payment.status='COMPLETE'
+                            new_payment.save()
+                            #====saved the withdraw to account as successful
+
+                            #===its time to create and save the profit model to the db
+                            profit = Profits(
+                                profit_amount=charge,
+                                payment_ref=new_payment
+                            )
+                            profit.save()
+                            return Response({
+                                'status':True,
+                                'message':'withdraw to account successful',
+                                
+                            },status=status.HTTP_200_OK)
+                        except RaveExceptions.IncompletePaymentDetailsError as e:
+                            sender_balance = sender_balance
+                            wallet_user.save()
+                            return Response({
+                                'status':False,
+                                'message':'Transaction Error'
+                            })
+                    else:
+                        return Response({
+                            'status':False,
+                            'message':'Insufficient balance'
+                        })
+                else:
+                    return Response({
+                        'status':False,
+                        'message':'Mobile money not support in country'
+                    })
+            else:
+                return Response({
+                    'status':False,
+                    'message':'User is not verified'
+                })
+
+        except User.DoesNotExist:
+            return Response({
+                'status':False,
+                'message':'User not found'
+            })
 
 
+#======withdraw to non spark user is alittle different only difference is to provide phone number
+class SendNonSparkView(APIView):
+    def post(self,request,*args, **kwargs):
+        email = request.query_params['email']#gottern the email now
+        sender_pin = request.query_params['PIN']
+        rec_country = request.query_params['email']
+        amount = request.query_params['amount']
+        rec_phone = request.query_params['phone']
 
-
-#==testing aswell the wallet to wallet transfer,case wen user wants to send other user directly to their wallet
-class TestWalletTransfer(APIView):
-    def post(self,request, *args, **kwargs):
-        details ={
-            "account_bank": "flutterwave",
-            "account_number": MerchantID,
-            "amount": 500,
-            "currency": "UGX",
-            "debit_currency": "UGX",
-            "beneficiary_name":"Bbosa",
-        }
-        res=rave.Transfer.initiate(details)
-        return Response(res, status=status.HTTP_200_OK)
-
-
-#after login am supposed to return wallet details to user
-#am gonna use the email to pick his details
-# class UserWalletDetails(generics.RetrieveAPIView):
-#     serializer_class = WalletDetailSerializer
-#     look_up_field = "email"
-
-#     def get_queryset(self,):
-#         #email = self.request.query_params.get('email',None)
-#         email=self.look_up_field
-#         print(email)
-#         #first==filter-user
-#         now_user = User.objects.get(email=email)
-#         #now filter wallet model for the user who is the owner
-#         wallet_user = Wallet.objects.get(owner=now_user)
-#         return wallet_user
-
-
+        charge = 500; minimum_balance = 2000 
+        try:
+            user_targ=User.objects.get(email=email)
+            if user_targ.is_verified:
+                if user_targ.PIN == int(sender_pin):
+                    if rec_country in mm_countries:
+                        try:
+                            wallet_user = Wallet.objects.get(owner=user_targ)
+                            sender_balance = wallet_user.balance 
+                            if sender_balance*0.5 > minimum_balance and sender_balance - (int(amount) + charge) > minimum_balance:
+                                try:
+                                    sender_balance -=  int(amount)
+                                    wallet_user.save()
+                                    #save the wallet
+                                    
+                                    new_payment=Payment(status='PENDING',amount=int(amount),user=user_targ,
+                                        category='WITHDRAW'
+                                    )
+                                    new_payment.save()
+                                    details = {
+                                        "account_bank": get_account_bank(rec_country),
+                                        "account_number": format_phone_number(rec_phone,rec_country),
+                                        "amount": int(amount),
+                                        "currency": get_currency(user_targ.country),
+                                        "beneficiary_name": "recipient",
+                                        "meta": [
+                                            {
+                                                "sender": "Flutterwave Developers",
+                                                "sender_country": "UG",
+                                                "mobile_number": "256704372213"
+                                            }
+                                        ],
+                                    }
+                                    res=rave.Transfer.initiate(details)
+                                    new_payment.status='COMPLETE'
+                                    new_payment.save()
+                                    #==save the profits made====
+                                    profit = Profits(
+                                        profit_amount=charge,
+                                        payment_ref=new_payment
+                                    )
+                                    profit.save()
+                                    #==saving the Profits model to the database
+                                    return Response({
+                                        'status':True,
+                                        'message':'sent to {} successful'.format(rec_phone),
+                                        
+                                    },status=status.HTTP_200_OK)
+                                except RaveExceptions.IncompletePaymentDetailsError as e:
+                                    sender_balance = sender_balance
+                                    wallet_user.save()
+                                    return Response({
+                                        'status':False,
+                                        'message':'Transaction Error'
+                                    })
+                            else:
+                                return Response({
+                                    'status':False,
+                                    'message':'Insufficient balance'
+                                })
+                        except Wallet.DoesNotExist:
+                            return Response({
+                                'status':False,
+                                'message':'User wallet not found'
+                            })
+                    else:
+                        return Response({
+                            'status':False,
+                            'message':'Mobile money not supported '
+                        })
+                else:
+                    return Response({
+                        'status':False,
+                        'message':"Provide correct PIN"
+                    })
+            else:
+                return Response({
+                    'status':False,
+                    'message':'User is not verified'
+                })
+        except User.DoesNotExist:
+            return Response({
+                'status':False,
+                'message':'User not found'
+            })
+                            
+                        
 
 class UserWalletDetails(APIView):
     def get(self,request,*args, **kwargs):

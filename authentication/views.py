@@ -1,4 +1,8 @@
+from calendar import month
+from collections import Counter
+from unicodedata import category
 from django.shortcuts import render
+from django.db.models import Avg,Sum
 from rest_framework import generics, status,views
 from rest_framework.views import APIView
 from rest_framework import serializers
@@ -6,6 +10,7 @@ from rest_framework import serializers
 from rest_framework.response import Response 
 from .serializers import*
 from .models import*
+from wallet.models import*
 
 import string 
 import random
@@ -58,6 +63,74 @@ class RegisterView(generics.GenericAPIView):
         else:
             return Response({'status':False,'message':'Check details'},
             status=status.HTTP_400_BAD_CONTENT)
+
+
+#====view to handle creating admin user ======
+class RegisterAdmin(APIView):
+    serializer_class = AdminSerializer
+    def post(self,request, *args, **kwargs):
+        """
+            view to handle creating admin user, wat am going to do is i will create it
+            then real admin user will just change the password.
+        """
+        email = request.data.get('email',False)
+        username = request.data.get('username',False)
+        password = request.data.get('password',False)
+        
+        if email and username and password:
+            temp_data = {
+                'email':email,
+                'username':username,
+                'password':password
+            }
+            serializer = AdminSerializer(data=temp_data)
+            serializer.is_valid(raise_exception=True)
+            admin = serializer.save()
+            admin.set_password(password)
+            admin.save()
+            return Response({
+                'status':True,
+                'message':'admin created'
+            })
+        else:
+            return Response({
+                'status':False,
+                'message':'Provide Credentials'
+            })
+           
+
+#==========login the admin=========
+class AdminLoginView(APIView):
+    serializer_class = AdminLoginSerializer
+    def post(self,request,*args, **kwargs):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        if username and password:
+            try:
+                now_admin = UserAdmin.objects.get(username=username)
+                if now_admin.password == password:
+                    return Response({
+                        "status":True,
+                        "message":"Admin Login Successful"
+                    })
+                else:
+                    return Response({
+                        "status":False,
+                        "message":"Admin login Failed"
+                    })
+            except UserAdmin.DoesNotExist:
+                return Response({
+                    'status':False,
+                    'message':'Admin not Found'
+                })
+        else:
+            return Response({
+                'status':False,
+                'message':'Provide username and password'
+            })
+
+            
+
 
 
 #===next step is to validate the otp which was sent in the email
@@ -205,10 +278,61 @@ class AddUsernameView(APIView):
             })
 
 
-            
 
         
 
+        
+#=====view to list total number of users registered, registered permonth,
+class UserAnalyticsView(APIView):
+    def get(request, *args, **kwargs):
+        """
+            but wait how do i verify that the request is from the admin
+            ==
+            task is to get the total users registered, registered per month, registered by country
+        """
+        #total_users = User.objects.select_related()#just want to use select_related to be modify my queries
+        #but remmember this returns a query, use aggregate to get sum
+        # total_number_users = [s
+        months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+        #supported countries
+        countries = ["Uganda","Kenya","Tanzania","Rwanda","Burundi","UAE","Nigeria"]
+        total_users = User.objects.count()#this gives me total users
+
+        all_users =  User.objects.select_related()
+
+        # month_count_dict = {month:count for month in months for count in  all_users.User.objects.filter(get_month=month).count()}
+        #awesome this now gives me the dictionary i need
+        
+        # total_country_users = {country:user.count for country in countries for count in User.objects.filter(country=country).count()}
+
+        #====now i need to get the 
+        #=======should also work on the 
+        #===getting the total amount for topup and for withdraw
+        #======
+        total_country_users = dict(Counter([user.country for user in all_users]))
+
+        
+        top_ups = Payment.objects.filter(status='COMPLETE',category='TOP_UP').aggregate(Sum('amount'))
+        withdraws = Payment.objects.filter(status='COMPLETE',category='WITHDRAW').aggregate(Sum('amount'))
+
+        #=====last is the profits to be made======
+        #====first get calculate the withdraws ==========
+        total_profits = Profits.objects.select_related().aggregate(Sum('profit_amount'))
+        
+
+        return Response({
+            'status':True,
+            'total_users':total_users,
+            'amount_top':top_ups,
+            'amount_withdraws':withdraws,
+            'total_profits':total_profits,
+            'country_user_count':total_country_users,
+            'message':'user analytics returned'
+        })
+
+
+
+        
 
        
 

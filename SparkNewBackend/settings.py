@@ -134,8 +134,11 @@ STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_USE_TLS = True
 EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_HOST = 'mail.sparkremit.co'
 EMAIL_PORT=587
 EMAIL_HOST_USER="bbosalj@gmail.com"
 EMAIL_HOST_PASSWORD="lvmknetnodbsnpjl"
+# EMAIL_HOST_USER='support@sparkremit.co'
+# EMAIL_HOST_PASSWORD="zwJmMZi6Dj"
 EMAIL_BACKEND ='django.core.mail.backends.smtp.EmailBackend'
 
