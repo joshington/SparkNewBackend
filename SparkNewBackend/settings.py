@@ -28,7 +28,7 @@ SECRET_KEY = 'rw=db396)o^y&h81vikq&)mfw#u_+)hxj90-!y@3wp+d)d&^-r'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -122,7 +122,7 @@ USE_TZ = True
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
+
 }
 
 
@@ -133,12 +133,36 @@ STATIC_URL = '/static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_USE_TLS = True
+
 EMAIL_HOST = 'smtp.gmail.com'
-# EMAIL_HOST = 'mail.sparkremit.co'
+EMAIL_HOST_USER="sparkremit@gmail.com"
+EMAIL_HOST_PASSWORD="nbofggmewwmheyuz"
 EMAIL_PORT=587
-EMAIL_HOST_USER="bbosalj@gmail.com"
-EMAIL_HOST_PASSWORD="lvmknetnodbsnpjl"
-# EMAIL_HOST_USER='support@sparkremit.co'
-# EMAIL_HOST_PASSWORD="zwJmMZi6Dj"
+
 EMAIL_BACKEND ='django.core.mail.backends.smtp.EmailBackend'
+
+# EMAIL_HOST = 'mail.sparkremit.co'
+# EMAIL_HOST_USER = 'support@sparkremit.co'
+# EMAIL_HOST_PASSWORD = 'mloxuswvsviffggs'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# # DEFAULT_FROM_EMAIL = 'Your Name <you@email.com>'
+
+# ADMINS = (
+#     ('Bosa', 'bbosalj@gmail.com'),
+# )
+# MANAGERS = ADMINS
+
+
+
+
+
+
+# EMAIL_HOST_PASSWORD="lvmknetnodbsnpjl"
+# EMAIL_HOST_USER="bbosalj@gmail.com"
+
+# EMAIL_HOST_USER='support@sparkremit.co'
+# EMAIL_HOST_PASSWORD="mloxuswvsviffggs"
+# DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
 

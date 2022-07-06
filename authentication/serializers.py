@@ -9,14 +9,15 @@ from django.contrib.auth import authenticate
 class RegisterSerializer(serializers.ModelSerializer):
     # password = serializers.CharField(max_length=68, min_length=6,write_only=True)
     class Meta:
-        model = User 
-        fields=['phone','email']
-        
+        model = User
+        fields=['phone','email','country']
+
     #hashing the password
     def create(self, validated_data):
         email = validated_data['email']
         phone = validated_data['phone']
-        if email and phone:
+        country = validated_data['country']
+        if email and phone and country:
             instance = self.Meta.model(**validated_data)
         instance.save()
         return instance
@@ -26,7 +27,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         #     instance.set_password(password)
         # instance.save()
         # return instance
-    
+
 class AdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserAdmin
@@ -60,7 +61,7 @@ class LoginSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email','PIN']
-       
+
 class CreateUserNameSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

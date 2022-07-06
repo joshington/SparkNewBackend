@@ -14,7 +14,7 @@ from django.utils import timezone
 from wallet.models import*
 
 class UserManager(BaseUserManager):
-    use_in_migrations: True 
+    use_in_migrations: True
     def create_user(self, uname,phone,email,PIN,password=None):
         if not email:raise ValueError(_('You must provide an email address'))
         if not  phone:raise ValueError(_('You must provide a phone contact'))
@@ -31,7 +31,7 @@ class UserManager(BaseUserManager):
         user.save(using=self._db)
         return user
 
-    #fetch all users using 
+    #fetch all users using
 
 
 months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
@@ -57,6 +57,11 @@ class User(AbstractBaseUser,PermissionsMixin):
     def get_month(self):
         return months[self.created_at.date().month - 1]
 
+    @property
+    def currency(self):
+        pass
+
+
 
     objects=UserManager()
 
@@ -64,14 +69,14 @@ class User(AbstractBaseUser,PermissionsMixin):
     REQUIRED_FIELDS = ['phone']
 
 
-   
+
     #===so if i do user.get_month == gets me the month the user was registered in
 
 
 
     def __str__(self):
-        return self.email 
-    
+        return self.email
+
     class Meta:
         unique_together = ("PIN","email")
 
@@ -83,7 +88,7 @@ class User(AbstractBaseUser,PermissionsMixin):
 
     def has_perm(self,perm,obj=None):
         """Does the user have aspecific permission"""
-        return True 
+        return True
 
     def has_module_perms(self, app_label: str) -> bool:
         """Does the user have permissions to view the app `app_label`"""
@@ -94,12 +99,12 @@ class User(AbstractBaseUser,PermissionsMixin):
 class EmailOTP(models.Model):
     otp = models.IntegerField()
     count = models.IntegerField(default=0, help_text = 'Number of otp_sent')
-    validated =  models.BooleanField(default = False, 
+    validated =  models.BooleanField(default = False,
         help_text = 'If it is true, that means user have validate otp correctly in second API')
     owner = models.ForeignKey(User, related_name='userotp', on_delete=models.DO_NOTHING)
 
     def __str__(self) -> str:
-        return self.otp 
+        return self.otp
 
 
 #====working on the admin
@@ -119,9 +124,9 @@ class UserAdmin(models.Model):
 #thus after registering
 
 
-#====before saving 
+#====before saving
 
-@transaction.atomic 
+@transaction.atomic
 @receiver(post_save, sender=User)
 def create_wallet(sender, instance,created, **kwargs):
     """

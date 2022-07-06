@@ -1,6 +1,6 @@
 from operator import add
 from django.shortcuts import render
-import django_filters.rest_framework
+# import django_filters.rest_framework
 from rest_framework import generics, status,views
 from rest_framework.views import APIView
 # Create your views here.
@@ -48,7 +48,7 @@ load_dotenv()
 # MerchantID=5799821
 
 
-rave = Rave(os.getenv("PUB_KEY"),os.getenv("SEC_KEY") , usingEnv=False)
+rave = Rave("FLWPUBK-253d6258de134d39d454c04310656340-X","FLWSECK-0ff584946aa70186e0d1bc307b408725-X", usingEnv=False, production=True)
 #os.getenv("SEC_KEY")
 # rave = Rave(RAVE_PUBLIC_KEY, RAVE_SECRET_KEY, usingEnv = False)
 
@@ -93,7 +93,7 @@ class GetBalance(APIView):
         else:
             return Response({'status':False,'detail':'Balance not returned'},status=status.HTTP_400_BAD_REQUEST)
 
-        
+
 
 
 class UUIDEncoder(json.JSONEncoder):
@@ -132,18 +132,18 @@ class TopUp(APIView):
                 })
         else:
             return Response({'status':False,'detail':'User not authenticated'})
-        
-#finding======all the required the transactions from the wallet 
+
+#finding======all the required the transactions from the wallet
 class Last7Transactions(APIView):
     def get(self, request):
         #===have to fist check that user is authenticated
         # request = self.context.get("request")
         # if request and hasattr(request, "user"):
         user=self.request.user
-        print(user.id)   
+        print(user.id)
         all_payments = Payment.objects.filter(category='TOP_UP')
         #===since its a list its time to iterate
-        #use enumerate to return 
+        #use enumerate to return
         days_of_week = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
         payment_array = [(days_of_week[payment.paid_at.weekday()],payment.amount) for payment in all_payments]
 
@@ -154,22 +154,21 @@ class Last7Transactions(APIView):
 #===========search for users========
 class SparkUsersView(APIView):
     serializer_class = SparkUserSerializer
-    filter_backends = [django_filters.rest_framework.DjangoFilterBackend]
     def get(self,request,*args,**kwargs):
         username=self.request.query_params.get('uname')
         queryset = User.objects.filter(uname__icontains=username)
 
         all_users = [user.uname for user in queryset]
-       
 
-        
+
+
         #==now just return the users======
         return Response({'status':True,'users':all_users}, status=status.HTTP_200_OK)
 
-    
-   
 
-   
+
+
+
 
 
 
@@ -179,23 +178,23 @@ class SparkUsersView(APIView):
 
 
 
-#=====this is for the 
+#=====this is for the
 class TransPerMonth(APIView):
     def get(self,request):
         """
-            target of endpoint is to return transactions per month 
+            target of endpoint is to return transactions per month
         """
         #all_payments=
         pass
 
 class Withdraw(APIView):
     serializer_class = WithdrawSerializer
-    
+
     def post(self, request):
         phone = request.data.get('phone_number',False)
         amount=request.data.get('amount',False)
         user=User.objects.filter(phone=phone)
-        
+
         print(user)
         if user is not None:
             try:
@@ -235,12 +234,12 @@ class SendToAccountView(APIView):
 
 
         #===set my minimum balance as 2000
-        minimum_balance = 2000 
+        minimum_balance = 2000
         if recipient and amount and email:
             sender = User.objects.get(email=email)
             wallet_user = Wallet.objects.get(owner=sender)
             #get sender balance
-            sender_balance = wallet_user.balance 
+            sender_balance = wallet_user.balance
             #==get the recipient now=====
             receiver_list = User.objects.filter(uname=recipient)
             receiver = receiver_list.first()
@@ -279,11 +278,11 @@ class SendToAccountView(APIView):
                 'message':'Provide all detail'
             })
 
-                    
-                
-                
 
-            
+
+
+
+
 
 
 
@@ -334,13 +333,13 @@ def transfer_money_to_phone(phone, amount,username="Unknown User"):
 #so ask for it
 
 
-#=====format the phone number basing on the coutry ===so actually 
+#=====format the phone number basing on the coutry ===so actually
 def format_phone_number(phone_number):
     if re.search(r"\A\+2567\d{8}\Z",phone_number):
         return phone_number[1:]
     elif re.search(r"\A07\d{8}\Z",phone_number):
         return "256" + phone_number[1:]
-#=====actually 
+#=====actually
 
 #===just  use a function to automate adding country code to the phone=====
 def add_code_phone(country,phone):
@@ -379,8 +378,8 @@ def format_phone_number(phone_number,country):
                     return phone_number[1:]
                 elif re.search(r"\A07\d{8}\Z",phone_number):
                     return add_code_phone(country,phone_number)
-        
-       
+
+
 
 
 #transfer to user
@@ -398,7 +397,7 @@ def get_account_bank(country):
         account_bank = "MTN"
     elif country == "Cameroon" or country == "Cote d'Ivoire":
         account_bank = "FMM"
-    
+
     return account_bank
 
 
@@ -413,7 +412,7 @@ def get_currency(country):
     elif country == "Zambia":
         currency = "ZMW"
     elif country == "Kenya":
-        currency = "KES" 
+        currency = "KES"
     elif country == "Ghana":
         currency = "GHS"
     elif country == "Cameroon":
@@ -431,7 +430,7 @@ class GetRates(APIView):
             "message":"All rates",
             "rates":res2
         })
-       
+
 
 
 #=====process balance is the basis for all cashouts====
@@ -456,26 +455,26 @@ class WithdrawView(APIView):
         user_email = request.query_params['email']
         amount = request.query_params['amount']
 
-        charge = 500; minimum_balance = 2000 
+        charge = 500; minimum_balance = 2000
 
-        #==basis 
+        #==basis
         try:
             user_targ = User.objects.get(email=user_email)
             wallet_user = Wallet.objects.get(owner=user_targ)
             #get sender balance
-            sender_balance = wallet_user.balance 
+            sender_balance = wallet_user.balance
             if user_targ.is_verified:
                 if user_targ.country in mm_countries:
                     if sender_balance*0.5 > minimum_balance and sender_balance - (int(amount) + charge) > minimum_balance:
                         #====first deduct then send ===, i think thats how the logic works
                         #===first deduct the dimes then complete
-                        
+
                         #instantiating payment but still pending
                         try:
                             sender_balance -=  int(amount)
                             wallet_user.save()
                             #save the wallet
-                            
+
                             new_payment=Payment(status='PENDING',amount=int(amount),user=user_targ,
                                 category='WITHDRAW'
                             )
@@ -508,7 +507,7 @@ class WithdrawView(APIView):
                             return Response({
                                 'status':True,
                                 'message':'withdraw to account successful',
-                                
+
                             },status=status.HTTP_200_OK)
                         except RaveExceptions.IncompletePaymentDetailsError as e:
                             sender_balance = sender_balance
@@ -539,31 +538,55 @@ class WithdrawView(APIView):
                 'message':'User not found'
             })
 
+#======check PIN
+#===i think we can use the Login PIN view
+class CheckPINView(APIView):
+    def post(self,request,*args,**kwargs):
+        email = request.query_params['email']#gottern the email now
+        PIN = request.query_params['PIN']
+
+        try:
+            user = User.objects.get(email=email)
+            if user.PIN == int(PIN):
+                return Response({
+                    'status':True,
+                    'message':'User PIN matches'
+                })
+            else:
+                return Response({
+                    'status':False,
+                    'message':'Enter correct PIN'
+                })
+        except User.DoesNotExist:
+            return Response({
+                'status':False,
+                'message':'User Not Found'
+            })
+
+
 
 #======withdraw to non spark user is alittle different only difference is to provide phone number
 class SendNonSparkView(APIView):
     def post(self,request,*args, **kwargs):
         email = request.query_params['email']#gottern the email now
-        sender_pin = request.query_params['PIN']
-        rec_country = request.query_params['email']
+        rec_country = request.query_params['country']
         amount = request.query_params['amount']
         rec_phone = request.query_params['phone']
 
-        charge = 500; minimum_balance = 2000 
+        charge = 500; minimum_balance = 2000
         try:
             user_targ=User.objects.get(email=email)
             if user_targ.is_verified:
-                if user_targ.PIN == int(sender_pin):
                     if rec_country in mm_countries:
                         try:
                             wallet_user = Wallet.objects.get(owner=user_targ)
-                            sender_balance = wallet_user.balance 
+                            sender_balance = wallet_user.balance
                             if sender_balance*0.5 > minimum_balance and sender_balance - (int(amount) + charge) > minimum_balance:
                                 try:
                                     sender_balance -=  int(amount)
                                     wallet_user.save()
                                     #save the wallet
-                                    
+
                                     new_payment=Payment(status='PENDING',amount=int(amount),user=user_targ,
                                         category='WITHDRAW'
                                     )
@@ -595,7 +618,7 @@ class SendNonSparkView(APIView):
                                     return Response({
                                         'status':True,
                                         'message':'sent to {} successful'.format(rec_phone),
-                                        
+
                                     },status=status.HTTP_200_OK)
                                 except RaveExceptions.IncompletePaymentDetailsError as e:
                                     sender_balance = sender_balance
@@ -619,11 +642,6 @@ class SendNonSparkView(APIView):
                             'status':False,
                             'message':'Mobile money not supported '
                         })
-                else:
-                    return Response({
-                        'status':False,
-                        'message':"Provide correct PIN"
-                    })
             else:
                 return Response({
                     'status':False,
@@ -634,8 +652,50 @@ class SendNonSparkView(APIView):
                 'status':False,
                 'message':'User not found'
             })
-                            
-                        
+
+class WalletTopUpSuccess(APIView):
+    def post(self,request,*args, **kwargs):
+        email = request.query_params['email']
+        amount = request.query_params['amount']
+
+        try:
+            targ = User.objects.get(email=email)
+            if targ and targ.is_verified:
+                user_wallet = Wallet.objects.get(owner=targ)
+                if user_wallet:
+                    if amount:
+                        balance = user_wallet.balance
+                        balance +=  int(amount)
+                        user_wallet.save()#==have to save it to the db
+                        #==create the payment====
+                        new_payment = Payment(
+                            status='COMPLETE',
+                            amount=int(amount),
+                            user=targ,
+                            category='TOP_UP'
+                        )
+                        new_payment.save()
+                        return Response({'status':True,'message':'Top up successful'})
+                    else:
+                        return Response({
+                            'status':False,
+                            'message':'Amount missing'
+                        })
+                else:
+                    return Response({
+                        'status':False,
+                        'message':'Cant find user wallet'
+                    })
+            else:
+                return Response({
+                    'status':False,
+                    'message':'User email not verified'
+                })
+        except User.DoesNotExist:
+            return Response({'status':False,'message':'User not Found'})
+
+
+
 
 class UserWalletDetails(APIView):
     def get(self,request,*args, **kwargs):
@@ -648,7 +708,6 @@ class UserWalletDetails(APIView):
         #print(request.query_params['email'])
         #wallet_balance = wallet_user.balance
         balance = wallet_user.balance
-        owner   = now_user.username
-        return Response({'status':True,'balance':balance,'owner':owner}, status=status.HTTP_200_OK)
+        owner   = now_user.uname
+        return Response({'status':True,'balance':balance,'owner':owner,'phone':now_user.phone}, status=status.HTTP_200_OK)
 
-    
