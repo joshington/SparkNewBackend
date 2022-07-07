@@ -283,43 +283,47 @@ class LoginView(APIView):
     serializer_class = LoginSerializer
     def post(self, request, *args, **kwargs):
         PIN = request.query_params['PIN']
+        email = request.query_params['email']
 
-        all_users = User.objects.filter(PIN=PIN)
-        if len(all_users) == 1 or len(all_users) > 1:
-            user_target = all_users[0]
-            if len(str(PIN)) == 4:
-                if user_target.is_verified:
-                    #now check if pin is equal to PIN
-                    if user_target.PIN == int(PIN):
-                        return Response({
-                            'status':True,
-                            'email': user_target.email,
-                            'message':'PIN match successful'
-                        })
+        # all_users = User.objects.filter(PIN=PIN)
+        #====change and use select_related
+        if email and PIN:
+            #use the select_related mthd to get the email
+            try:
+                _user = User.objects.select_related().get(email=email)
+                if _user and _user.is_verified:
+                    if len(str(PIN)) == 4:
+                        if _user.PIN == int(PIN):
+                            return Response({
+                                'status':True,
+                                'email':_user.email,
+                                'message':'User Login successful'
+                            }) 
+                        else:
+                            return Response({
+                                'status':False,
+                                'message':'Pin doesnt match'
+                            })
                     else:
                         return Response({
                             'status':False,
-                            'message':'Wrong PIN Match, Create New PIN'
+                            'message':'PIN must be 4 xters'
                         })
                 else:
                     return Response({
                         'status':False,
-                        'message':'User wasnot verified'
+                        'message':'User not verified, verify'
                     })
-            else:
+            except User.DoesNotExist:
                 return Response({
                     'status':False,
-                    'message':'PIN must be 4 xters'
+                    'message':'User Not Found, register'
                 })
         else:
             return Response({
                 'status':False,
-                'message':'User Not Found, Create User'
+                'message':'Provide email and PIN'
             })
-
-
-
-
 
 
 #====now this is for adding a username=======
