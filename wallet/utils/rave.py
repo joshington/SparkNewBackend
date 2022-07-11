@@ -32,8 +32,39 @@ def get_ip_addess():
     IP_Addr = socket.gethostbyname(host_name)
     return IP_Addr
 
+# def add_code_phone(country,phone):
+#     return {
+#         'Uganda':'256'+phone[1:],
+#         'Kenya':'254'+phone[1:],
+#         'Tanzania':'255'+phone[1:],
+#         'Rwanda':'250'+phone[1:],
+#         'Zambia':'260'+phone[1:],
+#         'Ghana':'233'+phone[1:],
+#         'Cameroon':'237'+phone[1:],
+#         "Cote d'Ivoire":'225'+phone[1:],
 
-def make_momo_payment(amount,phonenumber,user,email=DEFAULT_PAYMENT_EMAIL):
+#     }[country]
+
+#====get the country code==
+def country_code(country):
+    return {
+        'Uganda':'256',
+        'Ghana':'233'
+    }[country]
+
+#format phone number from here for Uganda and Ghana
+def format_phone_number(phone_number,country):
+    """
+        task is to get the country of the user and get the country code 
+    """
+    #==get the country code first====
+    code = country_code(country)#===since it gives me the code go ahead and check the first xters
+    if phone_number[:3] != code:
+        return code+phone_number #code has to be at the beginning
+    else:
+        return phone_number
+
+def make_momo_payment(amount,phonenumber,user,country,email=DEFAULT_PAYMENT_EMAIL):
     IP=get_ip_addess()
     txRef = str(uuid4())
     payment=Payment(transaction_ref=txRef,amount=amount,user=user)
@@ -44,17 +75,18 @@ def make_momo_payment(amount,phonenumber,user,email=DEFAULT_PAYMENT_EMAIL):
     payload = {
         'amount':amount,
         'email':email,
-        'phonenumber':phonenumber,
+        'phonenumber':format_phone_number(phonenumber,country),
         "redirect_url": "https://rave-webhook.herokuapp.com/receivepayment",
         'IP':IP
     }
-    return rave.UGMobile.charge(payload)
+    # return rave.UGMobile.charge(payload)
+    return payload #just return me the payload ===please
 
-def format_phone_number(phone_number):
-    if re.search(r"\A\+2567\d{8}\Z",phone_number):
-        return phone_number[1:]
-    elif re.search(r"\A07\d{8}\Z",phone_number):
-        return "256" + phone_number[1:]
+# def format_phone_number(phone_number):
+#     if re.search(r"\A\+2567\d{8}\Z",phone_number):
+#         return phone_number[1:]
+#     elif re.search(r"\A07\d{8}\Z",phone_number):
+#         return "256" + phone_number[1:]
 
 
 def transfer_money_to_phone(phone, amount,username="Unknown User"):

@@ -1,3 +1,4 @@
+# from locale import currency
 import uuid
 from django.conf import settings
 from django.db import models
@@ -61,6 +62,7 @@ class Transaction(models.Model):
         return str(self.id)
 
 
+
 class Wallet(models.Model):
     id=models.UUIDField(primary_key=True, default=uuid.uuid4,editable=False)
     balance=models.IntegerField()
@@ -75,11 +77,26 @@ class Wallet(models.Model):
     def __str__(self) -> str:
         return str(self.owner)
 
+
+    @property
+    def currency(self):
+        if self.owner.country == 'Uganda':
+            currency = 'UGX'
+        elif self.owner.country == 'Ghana':
+            currency = 'GHS'
+        elif self.owner.country == 'Nigeria':
+            currency = 'NGN'
+        elif self.owner.country == 'Arab Emirates':
+            currency = 'AED'
+        return currency
+
 #====>model for generating profits=====
 class Profits(models.Model):
     profit_amount=models.IntegerField()
     payment_ref = models.ForeignKey(Payment,blank=True, on_delete=models.CASCADE, null=True,db_constraint=False)
     created = models.DateTimeField(default=datetime.datetime.now())
+
+    
 
     class Meta:
         ordering = ['created']
@@ -88,3 +105,29 @@ class Profits(models.Model):
         return self.profit_amount
 
 
+
+#====model for the card====
+class BankAccount(models.Model):
+    account_number = models.CharField(blank=False,max_length=12)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,db_constraint=False,related_name='act_owner')
+    bank_code = models.CharField(default="044",max_length=20)
+    bank = models.CharField(default="Stanbic",max_length=30)
+    currency = models.CharField(default="UGX",max_length=3)
+
+    def __str__(self):
+        return self.owner 
+
+#=====card is actually for UAE users 
+
+
+class BankCard(models.Model):
+    cardno=models.CharField(max_length=20)
+    cvv = models.CharField(max_length=20)
+    currency=models.CharField(default="UGX",max_length=10)
+    expiry_month=models.CharField(max_length=20)
+    expiryyear=models.IntegerField()
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,db_constraint=False,related_name='user_card')
+
+    def __str__(self):
+        return self.owner
+    

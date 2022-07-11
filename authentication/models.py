@@ -99,6 +99,7 @@ class User(AbstractBaseUser,PermissionsMixin):
 class EmailOTP(models.Model):
     otp = models.IntegerField()
     count = models.IntegerField(default=0, help_text = 'Number of otp_sent')
+    initial=models.DateTimeField(default=datetime.datetime.now())
     validated =  models.BooleanField(default = False,
         help_text = 'If it is true, that means user have validate otp correctly in second API')
     owner = models.ForeignKey(User, related_name='userotp', on_delete=models.DO_NOTHING)
@@ -107,14 +108,17 @@ class EmailOTP(models.Model):
         return self.otp
 
 
+admin_pin = 5194
+
 #====working on the admin
 class UserAdmin(models.Model):
     email = models.EmailField(unique=True,db_index=True)
     username = models.CharField(max_length=12,default='@admin')
     password = models.CharField(max_length=20)
+    PIN = models.IntegerField(default=admin_pin)
 
     def __str_(self):
-        return self.username
+        return self.email
 
 
 

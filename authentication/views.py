@@ -27,6 +27,7 @@ def get_ottp():
 #generates the otp if email is provided
 
 
+admin_email = "sparkremit@gmail.com"
 
 
 #function to handle generating the
@@ -96,6 +97,35 @@ class ResendOTPView(APIView):
 
 
 
+#=====register the admin when they fill in email redirect them to the screen to fill in password===
+class LoginAdmin(APIView):
+    def post(self, request, *args, **kwargs):
+        """post in user email and take them to the password screen to fill in the password"""
+        email = request.query_params['email']
+
+        if email == admin_email:
+            return Response({
+                "status":True,
+                "message":"Continue to login"
+            })
+        else:
+            return Response({
+                "status":False,
+                "message":"Provide Email"
+            })
+
+#====actual admin login=====
+class ActualLogin(APIView):
+    def post(self, request, *args, **kwargs):
+        """gonna get the admin email from the state saved and then wen i enter password its alogin"""
+        email = request.query_params['email']
+        password =  email = request.query_params['password']
+
+        if email and password:
+            pass
+
+
+
 
 
 #====view to handle creating admin user ======
@@ -135,12 +165,12 @@ class RegisterAdmin(APIView):
 #==========login the admin=========
 class AdminLoginView(APIView):
     def post(self,request,*args, **kwargs):
-        username = request.query_params['username']
+        email = request.query_params['email']
         password = request.query_params['password']
 
-        if username and password:
+        if email and password:
             try:
-                now_admin = UserAdmin.objects.get(username=username)
+                now_admin = UserAdmin.objects.get(email=email)
                 if now_admin.password == password:
                     return Response({
                         "status":True,
@@ -177,6 +207,9 @@ class AdminDetails(APIView):
             'password':password
         })
 
+        
+#===u can just import datetime from here====
+from datetime import datetime
 #===next step is to validate the otp which was sent in the email
 class ValidateOTPView(APIView):
     serializer_class = VerifyUserSerializer
@@ -188,18 +221,33 @@ class ValidateOTPView(APIView):
         # #==finding the email_otp
         try:
             email_otp_reqd = EmailOTP.objects.get(otp=OTP)
+           
+
             emailotp_owner = email_otp_reqd.owner
             print(emailotp_owner)
-            #==verify the use====
-            emailotp_owner.is_verified = True
-            emailotp_owner.save()
-            return Response({
-                'status':True,
-                'message':'User verified successfully',
-                'verified_email':emailotp_owner.email
-            })
-        #this actually gets the Email otp and we can use it to get the owner
-
+            #===get the current time now===
+            now = datetime.now()
+            #==tryin to get the elapsed duration===
+            limit = 5 #using a duration of 5 minutes since generation of otp
+            actual_duration = now - email_otp_reqd.initial
+            duration_in_s = actual_duration.total_seconds()
+            #===get now the duration in minutes===
+            minutes = divmod(duration_in_s, 60)[0] #gets the duration in minutes
+            if minutes > limit:
+                return Response({
+                    "status":False,
+                    "message":"Time limit is 5 minutes"
+                })
+            else:
+                #==verify the use====
+                emailotp_owner.is_verified = True
+                emailotp_owner.save()
+                return Response({
+                    'status':True,
+                    'message':'User verified successfully',
+                    'verified_email':emailotp_owner.email
+                })
+            #this actually gets the Email otp and we can use it to get the owner
         except EmailOTP.DoesNotExist:
             return Response({
                 'status':False,
@@ -283,42 +331,60 @@ class LoginView(APIView):
     serializer_class = LoginSerializer
     def post(self, request, *args, **kwargs):
         PIN = request.query_params['PIN']
+        email = request.query_params['email']
 
-        all_users = User.objects.filter(PIN=PIN)
-        if len(all_users) == 1 or len(all_users) > 1:
-            user_target = all_users[0]
-            if len(str(PIN)) == 4:
-                if user_target.is_verified:
-                    #now check if pin is equal to PIN
-                    if user_target.PIN == int(PIN):
-                        return Response({
-                            'status':True,
-                            'email': user_target.email,
-                            'message':'PIN match successful'
-                        })
+        # all_users = User.objects.filter(PIN=PIN)
+        #====change and use select_related
+        if email and PIN:
+            #use the select_related mthd to get the email
+            if email == admin_email and PIN == admin_pin:
+                return Response({
+                    "status":True,
+                    "admin_email":admin_email,
+                    "message":"Continue with admin password"
+                })
+            else:
+                try:
+                    _user = User.objects.select_related().get(email=email)
+                    if _user and _user.is_verified:
+                        if len(str(PIN)) == 4:
+                            if _user.PIN == int(PIN):
+                                return Response({
+                                    'status':True,
+                                    'email':_user.email,
+                                    'message':'User Login successful'
+                                }) 
+                            else:
+                                return Response({
+                                    'status':False,
+                                    'message':'Pin doesnt match'
+                                })
+                        else:
+                            return Response({
+                                'status':False,
+                                'message':'PIN must be 4 xters'
+                            })
                     else:
                         return Response({
                             'status':False,
-                            'message':'Wrong PIN Match, Create New PIN'
+                            'message':'User not verified, verify'
                         })
-                else:
+                except User.DoesNotExist:
                     return Response({
                         'status':False,
-                        'message':'User wasnot verified'
+                        'message':'User Not Found, register'
                     })
-            else:
-                return Response({
-                    'status':False,
-                    'message':'PIN must be 4 xters'
-                })
         else:
             return Response({
                 'status':False,
-                'message':'User Not Found, Create User'
+                'message':'Provide email and PIN'
             })
 
-
-
+#===view to handle user settings====
+#=====update their details======
+class UpdateUserView(generics.UpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UpdateUserSerializer
 
 
 

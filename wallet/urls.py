@@ -3,9 +3,11 @@ from .views import*
 
 app_name='wallet'
 
+
+
 urlpatterns = [
     re_path('balance/', GetBalance.as_view()),
-    re_path('top-up/', TopUp.as_view()),
+    re_path('top-momo/', TopUpMomo.as_view()),
     # re_path('withdraw/', Withdraw.as_view()),
     re_path('wallet_topup_success/',WalletTopUpSuccess.as_view()),
     re_path('last7/<str:email>/',Last7Transactions.as_view()),
@@ -16,4 +18,5 @@ urlpatterns = [
     re_path('withdraw/',WithdrawView.as_view()),
     re_path('send-to-non/',SendNonSparkView.as_view()),
     re_path('check-pin/',CheckPINView.as_view()),
+    re_path('add-card/',Addcard.as_view()),
 ]
