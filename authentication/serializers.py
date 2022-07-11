@@ -28,6 +28,38 @@ class RegisterSerializer(serializers.ModelSerializer):
         # instance.save()
         # return instance
 
+#====update the user details===
+class UpdateUserSerializer(serializers.ModelSerializer):
+    email=serializers.EmailField(required=True)
+
+    class Meta:
+        model = User
+        fields = ('uname','email','PIN')
+
+        extra_kwargs = {
+            'uname':{'required':True}
+        }
+    def validate_email(self,value):
+        user = self.context['request'].user
+        if User.objects.exclude(email=user.email).filter(email=value).exists():
+            raise serializers.ValidationError({"status":False,"email": "This email is already in use."})
+        return value
+
+    def validate_username(self,value):
+        user = self.context['request'].user
+        if User.objects.exclude(email=user.email).filter(username=value).exists():
+            raise serializers.ValidationError({"status":False,"username": "This username is already in use."})
+        return value
+
+
+    def update(self, instance, validated_data):
+        instance.uname = validated_data['uname']
+        instance.email = validated_data['email']
+        instance.PIN =  validated_data['PIN']
+
+        instance.save()
+        return instance
+        
 class AdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserAdmin

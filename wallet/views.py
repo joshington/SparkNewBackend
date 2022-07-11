@@ -1,4 +1,5 @@
 from operator import add
+import uuid
 from django.shortcuts import render
 # import django_filters.rest_framework
 from rest_framework import generics, status,views
@@ -19,7 +20,7 @@ from django.db import transaction
 from authentication.models import*
 
 from .serializers import*
-from .models import Payment, Transaction,Wallet,Profits
+from .models import Payment, Transaction,Wallet,Profits,BankCard
 from .utils.balance import balance as get_balance
 from .utils.rave import make_momo_payment
 from .utils.top_up import top_up
@@ -48,7 +49,7 @@ load_dotenv()
 # MerchantID=5799821
 
 
-rave = Rave("FLWPUBK-253d6258de134d39d454c04310656340-X","FLWSECK-0ff584946aa70186e0d1bc307b408725-X", usingEnv=False, production=True)
+rave = Rave("FLWPUBK_TEST-0848d18635e3b1ef8e9a17c0473b1801-X","FLWSECK_TEST-e0cbc06d58428b734f5caa144be6cbb7-X", usingEnv=False)
 #os.getenv("SEC_KEY")
 # rave = Rave(RAVE_PUBLIC_KEY, RAVE_SECRET_KEY, usingEnv = False)
 
@@ -70,6 +71,17 @@ def key_exists(key,dict,label):
 
 def required_fields(dict, required, label):
     [key_exists(i,dict,label) for i in required]
+
+
+#=====write func to get the withdraw limit======
+def get_withdraw_limit(currency):
+    return {
+        'UGX':3500000,
+        'GHS':7000,
+        'NGN':390494
+    }[currency]
+
+
 
 
 
@@ -105,33 +117,68 @@ class UUIDEncoder(json.JSONEncoder):
 
 #====view to handle choice of apackage
 
+mm_countries = ['Uganda','Ghana']
 
-class TopUp(APIView):
-    """
-        essence is to topup on the wallet
-    """
-    serializer_class = TopUpSerializer
+curency_account_dict = {"UGX":"MPS","GHS":["MTN","TIGO","VODAFONE","AIRTEL"]}
 
+
+def top_mthd(country,payload):
+    return {
+        'Uganda':rave.UGMobile.charge(payload),
+        'Ghana':rave.GhMobile.charge(payload)
+    }[country]
+
+
+class TopUpMomo(APIView):
+    """
+        essence is to topup on the wallet,
+        on frontend give options of mobile money or bank
+        ==> if user country in mobile money countries, and user selected mobile money proceed with topup of mobile money
+        else return response mobile money not supported in country, 
+        if nigeria go ahead and use virtual cards, else go ahead and use bank, remember the get banks api basing on the country
+        ask user to choose from the banks.
+    """
+    #=======instead use request params to get the input=====
     @transaction.atomic
     def post(self,request,*args, **kwargs):
-        phone=request.data.get('phone',False)
-        amount=request.data.get('amount',False)
-        user = User.objects.filter(phone__iexact=phone).first()
-        if user:
-            try:
-                make_momo_payment(amount=amount,phonenumber=phone,user=user)
-                return Response({
-                    'status':True,
-                    'detail':'Top up initiated'
-                })
-            except Exception as e:
-                print(e)
+        #==just use request params ====
+        email  = request.query_params['email']
+        amount = request.query_params['amount']
+        #gonna pick up the phone number from the user
+        try:
+            user_targ = User.objects.get(email=email)
+            #since every country has a different charge method
+                #first inquire whether country is in the mm countries
+            if user_targ.country in mm_countries:
+                payload = make_momo_payment(amount=int(amount),country=user_targ.country,phonenumber=user_targ.phone,user=user_targ)
+                res = top_mthd(country=user_targ.country, payload=payload)
+                try:
+                    return Response(res)
+                except RaveExceptions.TransactionChargeError as e:
+                    return Response({
+                        'status':False,
+                        'error':e.err,
+                        'ref': e.err["flwRef"]
+                    })
+            else:
                 return Response({
                     'status':False,
-                    'detail':'Top up Failed'
+                    'message':'Country not support, use bank'
                 })
-        else:
-            return Response({'status':False,'detail':'User not authenticated'})
+        except User.DoesNotExist:
+            return Response({
+                'status':False,
+                'message':'User Not Found,Register'
+            })
+            
+
+class TopUpAccount(APIView):
+    """
+        essence is to top up using account number from the bank
+    """
+    def post(self):
+        pass
+
 
 #finding======all the required the transactions from the wallet
 class Last7Transactions(APIView):
@@ -151,12 +198,20 @@ class Last7Transactions(APIView):
         return Response({'status':True,'last7transactions':payment_array},status=status.HTTP_200_OK)
 
 
+
+
+
 #===========search for users========
 class SparkUsersView(APIView):
     serializer_class = SparkUserSerializer
     def get(self,request,*args,**kwargs):
         username=self.request.query_params.get('uname')
-        queryset = User.objects.filter(uname__icontains=username)
+
+        email = self.request.query_params.get('email')
+        #get the users uname from the email now=====
+        #====give in the user email====
+        owner_user = User.objects.get(email=email)
+        queryset = User.objects.filter(uname__icontains=username).exclude(uname=owner_user.uname)
 
         all_users = [user.uname for user in queryset]
 
@@ -164,14 +219,6 @@ class SparkUsersView(APIView):
 
         #==now just return the users======
         return Response({'status':True,'users':all_users}, status=status.HTTP_200_OK)
-
-
-
-
-
-
-
-
 
 
 #====sending money to the user chosen======
@@ -238,6 +285,9 @@ class SendToAccountView(APIView):
         if recipient and amount and email:
             sender = User.objects.get(email=email)
             wallet_user = Wallet.objects.get(owner=sender)
+
+            minimum_balance = get_minimum(wallet_user.currency)
+            withdraw_limit = get_withdraw_limit(wallet_user.currency)
             #get sender balance
             sender_balance = wallet_user.balance
             #==get the recipient now=====
@@ -245,7 +295,7 @@ class SendToAccountView(APIView):
             receiver = receiver_list.first()
             if receiver.is_verified:
                 #user can only receive if they are verified
-                if sender_balance*0.5 > minimum_balance and sender_balance - int(amount) > minimum_balance:
+                if sender_balance*0.5 > minimum_balance and sender_balance - int(amount) > minimum_balance and int(amount) < withdraw_limit:
                     #==first reduce the sender's balance
                     sender_balance  -=  int(amount)
                     wallet_user.save()
@@ -277,15 +327,6 @@ class SendToAccountView(APIView):
                 'status':False,
                 'message':'Provide all detail'
             })
-
-
-
-
-
-
-
-
-
 
 
 
@@ -442,7 +483,15 @@ class GetBalance(APIView):
             'status':True,
             'bal_data':res2
         })
+#====this from the rave acount
 
+def get_minimum(currency):
+    return {
+        'NGN':220,
+        'UGX':2000,
+        'GHS':5,
+        'AED':5
+    }[currency]
 
 class WithdrawView(APIView):
     def post(self, request, *args, **kwargs):
@@ -455,7 +504,9 @@ class WithdrawView(APIView):
         user_email = request.query_params['email']
         amount = request.query_params['amount']
 
-        charge = 500; minimum_balance = 2000
+        perc_charge = 0.014
+        #the charge is to be 1.4%
+        
 
         #==basis
         try:
@@ -463,16 +514,18 @@ class WithdrawView(APIView):
             wallet_user = Wallet.objects.get(owner=user_targ)
             #get sender balance
             sender_balance = wallet_user.balance
+            #get the minim balance 
+            minimum_balance = get_minimum(wallet_user.currency)
+            withdraw_limit = get_withdraw_limit(wallet_user.currency)
             if user_targ.is_verified:
                 if user_targ.country in mm_countries:
-                    if sender_balance*0.5 > minimum_balance and sender_balance - (int(amount) + charge) > minimum_balance:
+                    if sender_balance*0.5 > minimum_balance and int(amount) < withdraw_limit  and sender_balance - (int(amount) + (perc_charge*int(amount))) > minimum_balance:
                         #====first deduct then send ===, i think thats how the logic works
                         #===first deduct the dimes then complete
 
                         #instantiating payment but still pending
                         try:
-                            sender_balance -=  int(amount)
-                            wallet_user.save()
+                           
                             #save the wallet
 
                             new_payment=Payment(status='PENDING',amount=int(amount),user=user_targ,
@@ -496,17 +549,19 @@ class WithdrawView(APIView):
                             res=rave.Transfer.initiate(details)
                             new_payment.status='COMPLETE'
                             new_payment.save()
+                            sender_balance -=  int(amount)
+                            wallet_user.save()
                             #====saved the withdraw to account as successful
 
                             #===its time to create and save the profit model to the db
                             profit = Profits(
-                                profit_amount=charge,
+                                profit_amount=perc_charge*int(amount),
                                 payment_ref=new_payment
                             )
                             profit.save()
                             return Response({
                                 'status':True,
-                                'message':'withdraw to account successful',
+                                'message':'withdraw to mobile money successful',
 
                             },status=status.HTTP_200_OK)
                         except RaveExceptions.IncompletePaymentDetailsError as e:
@@ -563,6 +618,214 @@ class CheckPINView(APIView):
                 'message':'User Not Found'
             })
 
+easy_countries = ["Uganda","Ghana","Nigeria"]
+#=====send to bank account=====
+class SelfWithdrawBank(APIView):
+    def post(self,request,*args,**kwargs):
+        """target is to get the details so that user can withdraw from bank but get user details
+            get the email of the user to confirm that he is not foreign.
+        """
+        email = request.query_params['email']#gottern the email now 
+        amount = request.query_params['amount']
+        # rec_branch = request.query_params['bank branch']
+        #===here i dont need the rec_branch since its the same as registered
+        try:
+            _usernow  = User.objects.select_related().get(email=email)
+            if _usernow and _usernow.is_verified:
+                #have to check the user balance from their wallet
+                wallet_user = Wallet.objects.select_related().get(owner=_usernow)
+                #==get the account number using select_related====
+                user_account = BankAccount.objects.select_related().get(owner=_usernow)
+                #now get the account number
+                account_number = user_account.account_number
+                #====bank code as well===
+                bank_code = user_account.bank_code
+                if user_account and _usernow.country in easy_countries:
+                    wallet_balance = wallet_user.balance
+
+                    perc_charge = 0.014
+                    #get the minim balance 
+                    minimum_balance = get_minimum(wallet_user.currency)
+                    withdraw_limit = get_withdraw_limit(wallet_user.currency)
+                    #========above fetches the withdraw limit  of the user=======
+                    if amount:
+                        if wallet_balance*0.5 > minimum_balance and int(amount) < withdraw_limit and wallet_balance - (int(amount) + (perc_charge*int(amount))) > minimum_balance:
+                            new_payment=Payment(status='PENDING',amount=int(amount),user=_usernow,
+                                category='WITHDRAW'
+                            )
+                            new_payment.save()
+                            #start the process, get dest branch code
+                            details = {
+                                "account_bank":bank_code,
+                                "account_number": account_number,
+                                "amount": int(amount),
+                                "narration": "Test GHS bank transfers",
+                                "currency": wallet_user.currency,
+                                "destination_branch_code": bank_code,
+                                "beneficiary_name": "recipient"
+                            }
+                            res = rave.Transfer.initiate(details)
+                            new_payment.status = 'COMPLETE'
+                            new_payment.save()
+                            wallet_balance -= int(amount)
+                            wallet_user.save()
+                            #saving the profits===
+                            profit = Profits(
+                                profit_amount=perc_charge*int(amount),
+                                payment_ref=new_payment
+                            )
+                            profit.save()
+                            return Response({
+                                'status':True,
+                                'message':'withdraw to Bank successful',
+
+                            },status=status.HTTP_200_OK)
+                        else:
+                            return Response({
+                                'status':False,
+                                'message':'Low Balance, please Topup'
+                            })
+                    else:
+                        return Response({
+                            "status":False,
+                            "message":"Enter amount"
+                        })
+                else:
+                    return Response({
+                        "status":False,
+                        "message":"Add Account details"
+                    })
+            else:
+                return Response({
+                    "status":False,
+                    "message":"User not verified"
+                })
+                #===pick it from their bank account======
+                #let users first add their bank account.
+                #pick it from the 
+        except User.DoesNotExist:
+            return Response({
+                'status':False,
+                'message':'email not found'
+            })
+
+
+
+#=====mthd for generating the reference=====
+def generate_transaction_reference():
+    ref =  uuid.uuid4()
+    return ref
+
+
+#===now when sending money to a user using their account number========
+#====okay for this the user canbe similar but still i need their bank branch details, bank code to say, country
+class SendToBankUser(APIView):
+    def post(self, request, *args,**kwargs):
+        email = request.query_params['email']#gottern the email now
+        rec_country = request.query_params['country']#cz this helps me get the bank code of the users bank
+        rec_acct_number = request.query_params['receiver_account_number']
+        rec_branch_code = request.query_params['receiver_branch_code']
+        amount = request.query_params['amount']
+        rec_currency = request.query_params['receiver_currency']
+        rec_name  = request.query_params['receiver_name']
+
+        #====cz  for countries ======
+        perc_charge = 0.014
+        
+        if email and rec_country and rec_acct_number and rec_branch_code and amount and rec_currency:
+            #get the user basing on the email provided.
+            user_targ = User.objects.select_related().get(email=email)
+            if user_targ.is_verified:
+                wallet_now = Wallet.objects.select_related().get(owner=user_targ)
+                #get the minim balance 
+                minimum_balance = get_minimum(wallet_now.currency)
+                #after getting the user's wallet now findout their balance
+                withdraw_limit = get_withdraw_limit(wallet_now.currency)
+                user_balance = wallet_now.balance
+                
+                #==get the account number using select_related====
+                user_account = BankAccount.objects.select_related().get(owner=user_targ)
+                #now get the account number
+                account_number = user_account.account_number
+                #====bank code as well===
+                bank_code = user_account.bank_code
+                if user_balance*0.5 > minimum_balance and int(amount) < withdraw_limit and  user_balance - (int(amount) + (perc_charge*int(amount))) > minimum_balance:
+                    if rec_country == 'Nigeria':
+                        #why i pickd out nigeria its ecause the payload changes abit
+                        #==start and instantiate the Payment object,
+                        new_payment=Payment(status='PENDING',amount=int(amount),user=user_targ,
+                            category='WITHDRAW'
+                        )
+                        new_payment.save()
+                        details = {
+                            "account_bank": rec_branch_code,
+                            "account_number": rec_acct_number,
+                            "amount": int(amount),
+                            "narration": "Payment for things",
+                            "currency": rec_currency,
+                            "reference": generate_transaction_reference(),
+                            "callback_url": "https://webhook.site/b3e505b0-fe02-430e-a538-22bbbce8ce0d",
+                            "debit_currency": wallet_now.currency
+                        }
+                        res = rave.Transfer.initate(details)
+                        #===have to confirm that the transfer was successful======
+                        new_payment.status = 'COMPLETE'
+                        new_payment.save()
+                        user_balance -= int(amount)
+                        wallet_now.save()
+                            #saving the profits===
+                        profit = Profits(
+                            profit_amount=perc_charge*int(amount),
+                            payment_ref=new_payment
+                        )
+                        profit.save()
+                        return Response(res, status=status.HTTP_200_OK)
+                    elif rec_country  == "Uganda" or rec_country == "Ghana":
+                        new_payment=Payment(status='PENDING',amount=int(amount),user=user_targ,
+                            category='WITHDRAW'
+                        )
+                        new_payment.save()
+                        details = {
+                            "account_bank": rec_branch_code,
+                            "account_number": rec_acct_number,
+                            "amount": int(amount),
+                            "narration": "send account",
+                            "currency": rec_currency,
+                            "destination_branch_code":rec_branch_code,
+                            "beneficiary_name":rec_name
+                        }
+                        res = rave.Transfer.initate(details) #now actually initiating the transfer here
+                        #have to verify that actually the transfer was complete
+                        new_payment.status = 'COMPLETE'
+                        new_payment.save()
+                        user_balance -= int(amount)
+                        wallet_now.save()
+                        profit = Profits(
+                            profit_amount=perc_charge*int(amount),
+                            payment_ref=new_payment
+                        )
+                        return Response(res, status=status.HTTP_200_OK)
+                else:
+                    return Response({
+                        "status":False,
+                        "message":"Low balance, please recharge"
+                    })
+        else:
+            return Response({
+                "status":False,
+                "message":"Provide all details"
+            })
+
+                                        
+                
+
+
+
+
+
+        
+
+
 
 
 #======withdraw to non spark user is alittle different only difference is to provide phone number
@@ -573,7 +836,7 @@ class SendNonSparkView(APIView):
         amount = request.query_params['amount']
         rec_phone = request.query_params['phone']
 
-        charge = 500; minimum_balance = 2000
+        minimum_balance = 2000;perc_charge = 0.014
         try:
             user_targ=User.objects.get(email=email)
             if user_targ.is_verified:
@@ -581,7 +844,11 @@ class SendNonSparkView(APIView):
                         try:
                             wallet_user = Wallet.objects.get(owner=user_targ)
                             sender_balance = wallet_user.balance
-                            if sender_balance*0.5 > minimum_balance and sender_balance - (int(amount) + charge) > minimum_balance:
+
+                            minimum_balance = get_minimum(wallet_user.currency)
+                            withdraw_limit = get_withdraw_limit(wallet_user.currency)
+                            
+                            if sender_balance*0.5 > minimum_balance and int(amount) < withdraw_limit and sender_balance - (int(amount) + (perc_charge*amount)) > minimum_balance:
                                 try:
                                     sender_balance -=  int(amount)
                                     wallet_user.save()
@@ -610,7 +877,7 @@ class SendNonSparkView(APIView):
                                     new_payment.save()
                                     #==save the profits made====
                                     profit = Profits(
-                                        profit_amount=charge,
+                                        profit_amount=(perc_charge*int(amount)),
                                         payment_ref=new_payment
                                     )
                                     profit.save()
@@ -652,6 +919,10 @@ class SendNonSparkView(APIView):
                 'status':False,
                 'message':'User not found'
             })
+
+
+
+
 
 class WalletTopUpSuccess(APIView):
     def post(self,request,*args, **kwargs):
@@ -711,3 +982,54 @@ class UserWalletDetails(APIView):
         owner   = now_user.uname
         return Response({'status':True,'balance':balance,'owner':owner,'phone':now_user.phone}, status=status.HTTP_200_OK)
 
+
+#====ish at hand is to add the card details now====
+class Addcard(APIView):
+    def post(self,request, *args,**kwargs):
+        """
+            add card for the user, mostly for uae users
+        """
+        #====have to first get the user adding the card=====
+        email = request.query_params['email']
+        cardno= request.query_params['cardno']
+        cvv=request.query_params['cvv']
+        currency=request.query_params['currency']
+        expiry_month=request.query_params['expiry_month']
+        expiryyear=request.query_params['expiryyear']
+
+
+        if email:
+            user_now  = User.objects.select_related().get(email=email)
+            if user_now and user_now.is_verified:
+                #go ahead and add the card
+                newcard = BankCard(
+                    cardno=cardno,
+                    cvv=cvv,
+                    currency=currency,
+                    expiry_month=expiry_month,
+                    expiryyear=expiryyear,
+                    owner=user_now
+                )
+                newcard.save()
+                #after saved successfully u shud return aresponse to the user
+                return Response({
+                    "status":True,
+                    "message":"card added successfully"
+                })
+            else:
+                return Response({
+                    "status":False,
+                    "message":"User not verified"
+                })
+        else:
+            return Response({
+                "status":False,
+                "message":"Email not provided"
+            })
+
+
+
+        
+
+       
+        
