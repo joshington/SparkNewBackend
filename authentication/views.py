@@ -28,7 +28,7 @@ def get_ottp():
 
 
 admin_email = "sparkremit@gmail.com"
-
+admin_PIN = "5194"
 
 #function to handle generating the
 class RegisterView(generics.GenericAPIView):
@@ -199,15 +199,15 @@ class AdminDetails(APIView):
         admin_real = admins.first()
         username = admin_real.username
         email = admin_real.email
-        password = admin_real.password
+        PIN = admin_real.PIN
         return Response({
             'status':True,
             'username':username,
             'email':email,
-            'password':password
+            'PIN':PIN
         })
 
-        
+
 #===u can just import datetime from here====
 from datetime import datetime
 #===next step is to validate the otp which was sent in the email
@@ -221,32 +221,31 @@ class ValidateOTPView(APIView):
         # #==finding the email_otp
         try:
             email_otp_reqd = EmailOTP.objects.get(otp=OTP)
-           
+
 
             emailotp_owner = email_otp_reqd.owner
             print(emailotp_owner)
             #===get the current time now===
-            now = datetime.now()
-            #==tryin to get the elapsed duration===
-            limit = 5 #using a duration of 5 minutes since generation of otp
-            actual_duration = now - email_otp_reqd.initial
-            duration_in_s = actual_duration.total_seconds()
-            #===get now the duration in minutes===
-            minutes = divmod(duration_in_s, 60)[0] #gets the duration in minutes
-            if minutes > limit:
-                return Response({
-                    "status":False,
-                    "message":"Time limit is 5 minutes"
-                })
-            else:
-                #==verify the use====
-                emailotp_owner.is_verified = True
-                emailotp_owner.save()
-                return Response({
-                    'status':True,
-                    'message':'User verified successfully',
-                    'verified_email':emailotp_owner.email
-                })
+            # now = datetime.now()
+            # #==tryin to get the elapsed duration===
+            # limit = 5 #using a duration of 5 minutes since generation of otp
+            # actual_duration = now - email_otp_reqd.initial
+            # duration_in_s = actual_duration.total_seconds()
+            # #===get now the duration in minutes===
+            # minutes = divmod(duration_in_s, 60)[0] #gets the duration in minutes
+            # if minutes > limit:
+            #     return Response({
+            #         "status":False,
+            #         "message":"Time limit is 5 minutes"
+            #     })
+            #==verify the use====
+            emailotp_owner.is_verified = True
+            emailotp_owner.save()
+            return Response({
+                'status':True,
+                'message':'User verified successfully',
+                'verified_email':emailotp_owner.email
+            })
             #this actually gets the Email otp and we can use it to get the owner
         except EmailOTP.DoesNotExist:
             return Response({
@@ -335,14 +334,26 @@ class LoginView(APIView):
 
         # all_users = User.objects.filter(PIN=PIN)
         #====change and use select_related
+        #change the strategy, first check the email
         if email and PIN:
-            #use the select_related mthd to get the email
-            if email == admin_email and PIN == admin_pin:
-                return Response({
-                    "status":True,
-                    "admin_email":admin_email,
-                    "message":"Continue with admin password"
-                })
+            if email == admin_email:
+                try:
+                    admin = UserAdmin.objects.select_related().get(email=email)
+                    if PIN == admin.PIN:
+                        return Response({
+                            "admin":True,
+                            "message":"Admin Login Successful"
+                        })
+                    else:
+                        return Response({
+                            "status":False,
+                            "message":"Wrong Admin PIN given"
+                        })
+                except UserAdmin.DoesNotExist:
+                    return Response({
+                        "status":False,
+                        "message":"Admin Not Found"
+                    })
             else:
                 try:
                     _user = User.objects.select_related().get(email=email)
@@ -353,7 +364,7 @@ class LoginView(APIView):
                                     'status':True,
                                     'email':_user.email,
                                     'message':'User Login successful'
-                                }) 
+                                })
                             else:
                                 return Response({
                                     'status':False,
@@ -379,6 +390,17 @@ class LoginView(APIView):
                 'status':False,
                 'message':'Provide email and PIN'
             })
+
+
+
+
+
+
+
+
+
+
+
 
 #===view to handle user settings====
 #=====update their details======

@@ -3,7 +3,7 @@ import uuid
 from django.conf import settings
 from django.db import models
 from django.db.models.signals import pre_save, post_save
-from django.utils import timezone 
+from django.utils import timezone
 #can use timezone to get after days, months
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import RegexValidator
@@ -96,7 +96,7 @@ class Profits(models.Model):
     payment_ref = models.ForeignKey(Payment,blank=True, on_delete=models.CASCADE, null=True,db_constraint=False)
     created = models.DateTimeField(default=datetime.datetime.now())
 
-    
+
 
     class Meta:
         ordering = ['created']
@@ -115,9 +115,9 @@ class BankAccount(models.Model):
     currency = models.CharField(default="UGX",max_length=3)
 
     def __str__(self):
-        return self.owner 
+        return self.owner
 
-#=====card is actually for UAE users 
+#=====card is actually for UAE users
 
 
 class BankCard(models.Model):
@@ -130,4 +130,3 @@ class BankCard(models.Model):
 
     def __str__(self):
         return self.owner
-    

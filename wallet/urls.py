@@ -17,6 +17,8 @@ urlpatterns = [
     re_path('get-rates/',GetRates.as_view()),
     re_path('withdraw/',WithdrawView.as_view()),
     re_path('send-to-non/',SendNonSparkView.as_view()),
+    re_path('send-to-bankuser/', SendToBankUser.as_view()),
     re_path('check-pin/',CheckPINView.as_view()),
     re_path('add-card/',Addcard.as_view()),
+    re_path('self-withdraw/',SelfWithdrawBank.as_view()),
 ]

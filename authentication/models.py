@@ -114,8 +114,7 @@ admin_pin = 5194
 class UserAdmin(models.Model):
     email = models.EmailField(unique=True,db_index=True)
     username = models.CharField(max_length=12,default='@admin')
-    password = models.CharField(max_length=20)
-    PIN = models.IntegerField(default=admin_pin)
+    PIN = models.CharField(default=admin_pin,max_length=4)
 
     def __str_(self):
         return self.email
