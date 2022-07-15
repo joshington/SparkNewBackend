@@ -222,7 +222,10 @@ class ValidateOTPView(APIView):
         try:
             email_otp_reqd = EmailOTP.objects.get(otp=OTP)
 
-
+            #
+            email_otp_reqd.validated = True
+            #====have to use validated so that user cant use it
+            email_otp_reqd.otp.delete()#delete the otp after using it
             emailotp_owner = email_otp_reqd.owner
             print(emailotp_owner)
             #===get the current time now===
@@ -240,6 +243,7 @@ class ValidateOTPView(APIView):
             #     })
             #==verify the use====
             emailotp_owner.is_verified = True
+           
             emailotp_owner.save()
             return Response({
                 'status':True,
@@ -391,22 +395,54 @@ class LoginView(APIView):
                 'message':'Provide email and PIN'
             })
 
-
-
-
-
-
-
-
-
-
-
-
-#===view to handle user settings====
-#=====update their details======
-class UpdateUserView(generics.UpdateAPIView):
+class UpdateUserAPIView(generics.UpdateAPIView):
     queryset = User.objects.all()
     serializer_class = UpdateUserSerializer
+    lookup_field = 'pk'
+
+    def update(self,  request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'status':True,
+                'message':'User Details updated'
+            })
+        else:
+            return Response({
+                'status':False,
+                'message':'User Update Failed'
+            })
+
+class UpdateAdminAPIView(generics.UpdateAPIView):
+    queryset = UserAdmin.objects.all()
+    serializer_class = UpdateAdminSerializer
+    lookup_field = 'pk'
+
+    def update(self,  request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                'status':True,
+                'message':'User Details updated'
+            })
+        else:
+            return Response({
+                'status':False,
+                'message':'User Update Failed'
+            })
+
+
+
+
+
+
+    
 
 
 

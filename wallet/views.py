@@ -15,7 +15,7 @@ import json,base64 #we want to decode the token
 
 
 import json ,re
-from uuid import UUID
+from uuid import UUID, uuid4
 from django.db import transaction
 from authentication.models import*
 
@@ -44,12 +44,13 @@ load_dotenv()
 # RAVE_PUBLIC_KEY = os.environ["public_key"]
 # DEFAULT_PAYMENT_EMAIL = os.environ["default_email"]
 
-# secret_key="FLWSECK_TEST-e0cbc06d58428b734f5caa144be6cbb7-X"
-# public_key="FLWPUBK_TEST-0848d18635e3b1ef8e9a17c0473b1801-X"
+secret_key="FLWSECK_TEST-e0cbc06d58428b734f5caa144be6cbb7-X"
+public_key="FLWPUBK_TEST-0848d18635e3b1ef8e9a17c0473b1801-X"
 # MerchantID=5799821
 
 
-rave = Rave("FLWPUBK-253d6258de134d39d454c04310656340-X","FLWSECK-0ff584946aa70186e0d1bc307b408725-X", usingEnv=False,production=True)
+# rave = Rave("FLWPUBK-253d6258de134d39d454c04310656340-X","FLWSECK-0ff584946aa70186e0d1bc307b408725-X", usingEnv=False,production=True)
+rave = Rave(public_key, secret_key, usingEnv = False)
 #os.getenv("SEC_KEY")
 # rave = Rave(RAVE_PUBLIC_KEY, RAVE_SECRET_KEY, usingEnv = False)
 
@@ -1085,6 +1086,68 @@ class Addcard(APIView):
             })
 
 
+#====time now to create our virtual accounts=========
+class CreateVirtualAccount(APIView):
+    def post(self, request, *args, **kwargs):
+        """
+            target of this endpoint is to create a virtual account but since its only supported by
+            nigeria,s o we have to check the user country and user has to be verified actually=====
+        """
+        email = request.query_params['email']
+        #get the other details reqd to create the virtual account
+        bvn = request.query_params['bvn']#out of all this is the only one that needs to come from the user
+
+        if email and bvn:
+            try:
+                targ_user = User.objects.select_related().get(email=email)
+                if targ_user and targ_user.is_verified:
+                    if targ_user.country == 'Nigeria':
+                        #since only nigeria suports virtual accounts
+                        #to create the model we have to first ensure that the virtual account was created
+                        try:
+                            res = rave.VirtualAccount.create({
+                                "email": targ_user.email,
+                                "is_permanent":True, #since am intereseted in making static virtual accounts
+                                "bvn":bvn,
+                                "tx_ref":uuid.uuid4(),
+                                "narration":targ_user.uname
+                            })
+                            #now to create the model first confirm that it has been successful
+                            new_virtual_account = VirtualAccount(
+                                bvn =bvn,
+                                email=targ_user.email,
+                                txRef = uuid.uuid4(),
+                                is_permanent=True,
+                                narration=targ_user.uname,
+                                owner = targ_user
+                            )
+                            new_virtual_account.save()
+                            #==have saved this to the db
+                        except RaveExceptions.IncompleteAccountDetailsError as e:
+                            return Response({
+                                'status':False,
+                                'message': e.err["errMsg"]
+                            })
+                    else:
+                        return Response({
+                            "status":False,
+                            "message":"Virtual acounts available for Nigeria only"
+                        })
+                else:
+                    return Response({
+                        "status":False,
+                        "message":"User was not verified"
+                    })  
+            except User.DoesNotExist:
+                return Response({
+                    'status':False,
+                    'message':"User with email not Found"
+                })
+        else :
+            return Response({
+                'status':False,
+                'message': 'Provide all details'
+            })
 
 
 

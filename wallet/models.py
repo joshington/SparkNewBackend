@@ -130,3 +130,19 @@ class BankCard(models.Model):
 
     def __str__(self):
         return self.owner
+
+
+#=====since virtual accounts are good let me just add them for nigerian users===
+class VirtualAccount(models.Model):
+    bvn = models.CharField(max_length=30,blank=False)
+    email=models.EmailField(blank=False)
+    txRef = models.UUIDField(primary_key=True, default=uuid.uuid4,editable=False)#since we can use it to trace the virtual account
+    is_permanent=models.BooleanField(default=False)
+    narration=models.CharField(default='@sparkuser',max_length=100)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.CASCADE,db_constraint=False,related_name='user_virtual_acct')
+
+
+    def __str__(self) -> str:
+        return self.bvn
+
+    #==awesome user virtual account created succesffully, not hard i think=

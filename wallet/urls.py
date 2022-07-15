@@ -21,4 +21,5 @@ urlpatterns = [
     re_path('check-pin/',CheckPINView.as_view()),
     re_path('add-card/',Addcard.as_view()),
     re_path('self-withdraw/',SelfWithdrawBank.as_view()),
+    re_path('create-virtual/',CreateVirtualAccount.as_view()),
 ]
